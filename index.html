@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jewellers Calculator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#fff;color:#222}
+.wrap{max-width:640px;margin:auto;padding:28px 28px 50px}
+h1{font-size:30px;margin:0 0 4px;font-weight:800}
+.sub{color:#777;margin-bottom:24px}
+.card{border:1px solid #e3e3e3;border-radius:24px;padding:28px 28px 24px;box-shadow:0 2px 10px #00000008}
+label{display:block;font-size:18px;margin:0 0 10px}
+.field{margin-bottom:22px}
+input,select{width:100%;height:64px;border:1px solid #ddd;border-radius:16px;background:#fafafa;padding:0 20px;font-size:20px;color:#222;outline:none}
+input:focus,select:focus{border-color:#999;background:#fff}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.switch{display:grid;grid-template-columns:1fr 1fr;background:#f1f3f5;border-radius:14px;padding:4px}
+.switch button{height:48px;border:0;border-radius:11px;background:transparent;font-size:16px;font-weight:700}
+.switch button.active{background:#fff;box-shadow:0 1px 5px #0002}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+button.primary,button.reset{height:54px;border:0;border-radius:14px;font-size:18px;font-weight:800}
+.primary{background:#222;color:#fff}
+.reset{background:#eef2ff;color:#222}
+.result{margin-top:18px}
+.line{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee;font-size:17px}
+.total{font-size:30px;font-weight:800;margin-top:18px}
+.note{font-size:13px;color:#777;margin-top:12px;line-height:1.45}
+.hidden{display:none}
+.premium-locked{position:relative;margin-bottom:22px}
+.premium-locked .premium-content{filter:blur(6px);pointer-events:none;user-select:none}
+.premium-locked .premium-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;background:#ffffffcc;border-radius:24px;z-index:2}
+.premium-badge{font-size:20px;font-weight:800}
+.premium-locked.unlocked .premium-content{filter:none;pointer-events:auto;user-select:auto}
+.premium-locked.unlocked .premium-overlay{display:none}
+@media(max-width:430px){.wrap{padding:18px}.card{padding:22px 18px}.row{grid-template-columns:1fr}h1{font-size:27px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Jewellers Calculator</h1>
+<div class="sub">Weight aur 10 gram ka rate daalein.</div>
+
+<div id="appScreen">
+
+<div id="premiumSection" class="premium-locked">
+<div class="premium-overlay">
+<div class="premium-badge">🔒 Premium Feature</div>
+<div class="note" style="margin:8px 0 14px">Shop branding, customer details aur item photo — ye sab paid users ke liye hai. Mobile number se login karke unlock karein.</div>
+<div class="field" style="text-align:left">
+<label>Mobile Number</label>
+<input id="loginMobile" type="tel" maxlength="10" placeholder="10 digit mobile number">
+</div>
+<div id="recaptcha-container"></div>
+<button type="button" class="primary" id="sendOtpBtn" style="width:100%">Send OTP</button>
+<div id="otpBox" style="display:none;margin-top:14px;text-align:left">
+<div class="field">
+<label>Enter OTP</label>
+<input id="otpInput" type="tel" maxlength="6" placeholder="6 digit OTP">
+</div>
+<button type="button" class="primary" id="verifyOtpBtn" style="width:100%">Verify OTP</button>
+</div>
+<div id="loginMsg" class="note"></div>
+</div>
+<div class="premium-content">
+<div class="card" style="margin-bottom:22px;display:flex;justify-content:space-between;align-items:center">
+<b id="loggedInMobileLabel"></b>
+<button type="button" class="reset" id="logoutBtn">Logout</button>
+</div>
+<div class="card" style="margin-bottom:22px">
+<div class="field">
+<label>Shop Name</label>
+<input id="shopName" type="text" placeholder="Aapki dukaan ka naam">
+</div>
+<div class="field">
+<label>Shop Logo (optional)</label>
+<input id="shopLogo" type="file" accept="image/*">
+<div id="shopLogoPreview" style="margin-top:10px"></div>
+</div>
+<div class="field">
+<label>Shop GSTIN (optional)</label>
+<input id="shopGstinTop" type="text" maxlength="15" placeholder="Shop ka 15 digit GSTIN">
+</div>
+<div class="note">Ye details ek baar bharo, browser mein save ho jaayengi aur har bill/WhatsApp share mein apne aap aa jaayengi.</div>
+</div>
+
+<div class="card" style="margin-bottom:22px">
+<div class="field">
+<label>Customer Name</label>
+<input id="custName" type="text" placeholder="Customer ka naam">
+</div>
+<div class="field">
+<label>Customer Number</label>
+<input id="custPhone" type="tel" placeholder="10 digit mobile number">
+</div>
+<div class="field">
+<label>Saman (Item) Name</label>
+<input id="itemType" type="text" placeholder="Ring, Set, Jhumka, Chain, etc.">
+</div>
+<div class="field">
+<label>Saman ka Photo (optional)</label>
+<input id="itemPhoto" type="file" accept="image/*" capture="environment">
+<div id="itemPhotoPreview" style="margin-top:10px"></div>
+</div>
+</div>
+</div>
+</div>
+
+<div class="card">
+<div class="field">
+<label>Metal</label>
+<select id="metal">
+<option value="gold">Gold Jewellery</option>
+<option value="silver">Silver Jewellery</option>
+<option value="gold_diamond">Gold + Diamond Jewellery</option>
+<option value="silver_diamond">Silver + Diamond Jewellery</option>
+<option value="mangalsutra">Mangal Sutra Jewellery</option>
+<option value="kundan_mangalsutra">Kundan Mangal Sutra Jewellery</option>
+<option value="nagina">Gold + Nagina Jewellery</option>
+</select>
+</div>
+
+<div id="mangalBox" class="card" style="display:none;padding:18px;margin:0 0 22px;background:#fafafa">
+<label>Mangal Sutra Details</label>
+<div class="row">
+<div>
+<label>Kala Moti Weight (gram)</label>
+<input id="motiWeight" type="number" min="0" step="0.001" placeholder="1.000">
+</div>
+<div>
+<label>Kala Moti Amount (₹)</label>
+<input id="motiAmount" type="number" min="0" step="0.01" placeholder="500">
+</div>
+</div>
+<div id="kundanMangalFields" style="display:none;margin-top:14px">
+<div class="row">
+<div>
+<label>Kundan Weight (gram)</label>
+<input id="kundanWeight" type="number" min="0" step="0.001" placeholder="1.500">
+</div>
+<div>
+<label>Kundan Amount (₹)</label>
+<input id="kundanAmount" type="number" min="0" step="0.01" placeholder="5000">
+</div>
+</div>
+</div>
+<div class="note">Gold Weight = Total Jewellery Weight − Kala Moti Weight − Kundan Weight (Kundan Mangal Sutra mein).</div>
+</div>
+
+<div id="naginaBox" class="card" style="display:none;padding:18px;margin:0 0 22px;background:#fafafa">
+<label style="font-weight:700">Type</label>
+<select id="naginaType">
+<option value="Ruby">Ruby (माणिक)</option>
+<option value="Emerald">Emerald (पन्ना)</option>
+<option value="Sapphire">Sapphire (नीलम)</option>
+<option value="Yellow Sapphire">Yellow Sapphire (पोखराज)</option>
+<option value="Garnet">Garnet (गोमेद)</option>
+<option value="Cat's Eye">Cat’s Eye (लहसुनिया)</option>
+<option value="Amethyst">Amethyst (जमुनिया)</option>
+<option value="Topaz">Topaz</option>
+<option value="Turquoise">Turquoise (फिरोज़ा)</option>
+<option value="Opal">Opal</option>
+<option value="Tanzanite">Tanzanite</option>
+<option value="Other">Other / Other Nagina</option>
+</select>
+<div id="otherNaginaWrap" style="display:none;margin-top:14px">
+<label>Nagina Name</label>
+<input id="otherNagina" type="text" placeholder="Nagina ka naam">
+</div>
+<div class="field" style="margin-top:14px">
+<label>Nagina Weight Input</label>
+<div class="switch">
+<button type="button" id="naginaGramBtn" class="active">Weight (gram)</button>
+<button type="button" id="naginaCaratBtn">Carat</button>
+</div>
+</div>
+<div class="row">
+<div id="naginaGramWrap"><label>Nagina Weight (gram)</label><input id="naginaWeight" type="number" min="0" step="0.001" placeholder="0.000"></div>
+<div id="naginaCaratWrap" class="hidden"><label>Nagina Weight (carat)</label><input id="naginaCarat" type="number" min="0" step="0.001" placeholder="0.000"></div>
+<div><label>Nagina Amount (₹)</label><input id="naginaAmount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+</div>
+</div>
+
+<div id="diamondBox" class="card" style="display:none;padding:18px;margin:0 0 22px;background:#fafafa">
+<label>Diamond Details</label>
+<div class="field">
+<label>Diamond Weight Input</label>
+<div class="switch">
+<button type="button" id="diamondGramBtn" class="active">Weight (gram)</button>
+<button type="button" id="diamondCaratBtn">Carat</button>
+</div>
+</div>
+<div class="row">
+<div id="diamondGramWrap"><label>Diamond Weight (gram)</label><input id="diamondGram" type="number" min="0" step="0.001" placeholder="0.200"></div>
+<div id="diamondCaratWrap" class="hidden"><label>Diamond Weight (carat)</label><input id="carat" type="number" min="0" step="0.001" placeholder="1.000"></div>
+<div><label>Diamond Amount (₹)</label><input id="diamondAmount" type="number" min="0" step="0.01" placeholder="20000"></div>
+</div>
+<div class="row">
+<div><label>Certificate</label><select id="certificate"><option>No Certificate</option><option>GIA</option><option>IGI</option><option>HRD</option><option>Other</option></select></div>
+</div>
+<div class="field" style="margin-top:14px;margin-bottom:0">
+<label>Certificate Number (optional)</label>
+<input id="certificateNo" type="text" placeholder="Certificate number">
+</div>
+<div class="note">Diamond jewellery mein <b>Total Weight</b> poori jewellery ka weight hai. Diamond weight gram mein convert karke <b>Total Weight − Diamond Weight = Gold/Silver Weight</b> hoga.</div>
+</div>
+
+<div class="field">
+<label>Purity</label>
+<select id="purity">
+<option value="24">24K</option><option value="22">22K</option><option value="20">20K</option>
+<option value="18">18K</option><option value="14">14K</option>
+<option value="999">999 Silver</option><option value="925">925 Silver</option>
+</select>
+</div>
+
+<div class="field">
+<label>Weight (gram)</label>
+<input id="weight" type="number" min="0" step="0.001" placeholder="14.910">
+</div>
+
+<div class="field">
+<label>Rate (₹ / 10 gram)</label>
+<input id="rate" type="number" min="0" step="0.01" placeholder="147500">
+</div><div class="field">
+<label>Bhao</label>
+<select id="rateBasis">
+<option value="24">24K</option>
+<option value="22">22K</option>
+<option value="20">20K</option>
+<option value="18">18K</option>
+<option value="14">14K</option>
+<option value="10">10K</option>
+<option value="9">9K</option>
+</select>
+</div>
+
+
+<div class="field">
+<label>Making Charge (%)</label>
+<input id="making" type="number" min="0" step="0.01" value="0">
+</div>
+
+<div class="field">
+<label>Wastage (%)</label>
+<input id="wastage" type="number" min="0" step="0.01" value="0">
+</div>
+
+<div class="field">
+<label>GST</label>
+<div class="switch">
+<button type="button" id="gstYes" class="active">GST Bill (3%)</button>
+<button type="button" id="gstNo">Without GST</button>
+</div>
+</div>
+
+<div id="gstinWrap" class="field">
+<label>GSTIN (optional)</label>
+<input id="gstin" type="text" maxlength="15" placeholder="Shop ka 15 digit GSTIN">
+</div>
+
+<div class="field">
+</div>
+
+<div class="actions">
+<button type="button" class="primary" id="calculate">CALCULATE</button>
+<button type="button" class="reset" id="reset">Reset</button>
+</div>
+
+<div id="result" class="result hidden">
+<h2>Bill</h2>
+<div id="rCustNameRow" class="line" style="display:none"><span>Customer Name</span><b id="rCustName"></b></div>
+<div id="rCustPhoneRow" class="line" style="display:none"><span>Customer Number</span><b id="rCustPhone"></b></div>
+<div class="line"><span>Item</span><b id="rItemType"></b></div>
+<div id="rItemPhoto"></div>
+<div class="line"><span>Jewellery / Category</span><b id="rMetal"></b></div>
+<div id="rNaginaTypeRow" class="line" style="display:none"><span>Nagina Sub-Category</span><b id="rNaginaType"></b></div>
+<div id="rTotalWeightRow" class="line" style="display:none"><span>Total Jewellery Weight</span><b id="rTotalWeight"></b></div>
+<div id="rKundanWeightRow" class="line" style="display:none"><span>Kundan Weight</span><b id="rKundanWeight"></b></div>
+<div id="rMotiWeightRow" class="line" style="display:none"><span>Kala Moti Weight</span><b id="rMotiWeight"></b></div>
+<div id="rDiamondWeightRow" class="line" style="display:none"><span>Diamond Weight</span><b id="rDiamondWeight"></b></div>
+<div id="rNaginaWeightSubRow" class="line" style="display:none"><span>Nagina Weight</span><b id="rNaginaWeightSub"></b></div>
+<div id="rGoldWeightRow" class="line" style="display:none"><span id="rGoldWeightLabel">Gold Weight</span><b id="rGoldWeight"></b></div>
+<div id="rNaginaWeightRow" class="line" style="display:none"><span>Nagina Weight</span><b id="rNaginaWeight"></b></div>
+<div id="rNaginaAmountRow" class="line" style="display:none"><span>Nagina Amount</span><b id="rNaginaAmount"></b></div>
+<div id="rDiamondRow" class="line" style="display:none"><span>Diamond</span><b id="rDiamond"></b></div>
+<div id="rMetalPurityRow" class="line"><span id="rPurityLabel">Purity</span><b id="rPurity"></b></div>
+<div id="rRateBasisRow" class="line" style="display:none"><span>Bhao</span><b id="rRateBasis"></b></div>
+<div id="rRateRow" class="line"><span id="rRateLabel">Gold Rate</span><b id="rRate"></b></div>
+<div id="rMetalValueRow" class="line"><span id="rMetalValueLabel">Gold Value</span><b id="rMetalValue"></b></div>
+<div id="rDiamondAmountRow" class="line" style="display:none"><span>Diamond Amount</span><b id="rDiamondAmount"></b></div>
+<div id="rNaginaAmountAddRow" class="line" style="display:none"><span>Nagina Amount</span><b id="rNaginaAmountAdd"></b></div>
+<div id="rKundanAmountRow" class="line" style="display:none"><span>Kundan Amount</span><b id="rKundanAmount"></b></div>
+<div id="rMotiAmountRow" class="line" style="display:none"><span>Kala Moti Amount</span><b id="rMotiAmount"></b></div>
+<div id="rWastageRow" class="line"><span>Wastage</span><b id="rWastage"></b></div>
+<div id="rMakingRow" class="line"><span>Making Charge</span><b id="rMaking"></b></div>
+<div class="line"><span>Subtotal</span><b id="rSubtotal"></b></div>
+<div class="line"><span>GST</span><b id="rGST"></b></div>
+<div id="rGSTIN" class="note"></div>
+<div class="total">Total: ₹<span id="rTotal"></span></div>
+<div class="actions" style="margin-top:18px">
+<button type="button" class="primary" id="downloadPdf">Download Bill (PDF)</button>
+<button type="button" class="reset" id="shareWhatsapp">Share on WhatsApp</button>
+</div>
+</div>
+
+<div class="note">GST option sirf calculation ke liye hai. GST Bill mein 3% GST add hoga; Without GST mein GST ₹0 rahega.</div>
+</div>
+</div>
+</div>
+
+<script>
+(function(){
+let gstRate=3;
+
+const $=id=>document.getElementById(id);
+const money=n=>Number(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+// ==========================================================================
+// FIREBASE SETUP — REPLACE firebaseConfig BELOW WITH YOUR OWN PROJECT CONFIG
+// (Firebase Console → Project Settings → Your apps → Web app → config)
+// Login/cloud save WILL NOT WORK until you paste your real config here.
+// ==========================================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyDkzf9xJ6HDls8Ie2OTzdA4EwTY6wKTNsk",
+  authDomain: "jewelry-1b47a.firebaseapp.com",
+  projectId: "jewelry-1b47a",
+  storageBucket: "jewelry-1b47a.firebasestorage.app",
+  messagingSenderId: "1065081645857",
+  appId: "1:1065081645857:web:2efbc5efd1d07155166c60",
+  measurementId: "G-WE53P5M73H"
+};
+let fbReady=false, auth=null, db=null, confirmationResult=null, currentMobile='';
+try{
+  firebase.initializeApp(firebaseConfig);
+  auth=firebase.auth();
+  db=firebase.firestore();
+  fbReady=true;
+}catch(e){ console.warn('Firebase config missing/invalid — login disabled until real config is added.'); }
+
+// Shop details: loaded from Firestore once logged in (falls back to this browser's cache before login).
+let shopLogoDataUrl='';
+function loadShopSettings(){
+  try{
+    const name=localStorage.getItem('shopName')||'';
+    const gstin=localStorage.getItem('shopGstin')||'';
+    const logo=localStorage.getItem('shopLogo')||'';
+    $('shopName').value=name;
+    $('shopGstinTop').value=gstin;
+    if(gstin) $('gstin').value=gstin;
+    if(logo){ shopLogoDataUrl=logo; $('shopLogoPreview').innerHTML='<img src="'+logo+'" style="max-width:100px;border-radius:12px;display:block">'; }
+  }catch(e){}
+}
+function saveShopSettings(){
+  try{
+    localStorage.setItem('shopName',$('shopName').value.trim());
+    localStorage.setItem('shopGstin',$('shopGstinTop').value.trim().toUpperCase());
+    if(shopLogoDataUrl) localStorage.setItem('shopLogo',shopLogoDataUrl);
+  }catch(e){}
+  if(fbReady && db && currentMobile){
+    db.collection('shops').doc(currentMobile).set({
+      shopName:$('shopName').value.trim(),
+      shopGstin:$('shopGstinTop').value.trim().toUpperCase()
+    },{merge:true}).catch(err=>console.warn('Firestore save failed',err));
+  }
+}
+$('shopName').addEventListener('input',saveShopSettings);
+$('shopGstinTop').addEventListener('input',()=>{ $('gstin').value=$('shopGstinTop').value.trim().toUpperCase(); saveShopSettings(); });
+
+// --- Real Mobile + OTP login via Firebase Phone Auth ---
+function applyPremiumState(loggedIn){
+  $('premiumSection').classList.toggle('unlocked',loggedIn);
+  $('loggedInMobileLabel').textContent=loggedIn?('Logged in: +91'+currentMobile):'';
+}
+$('sendOtpBtn').onclick=function(){
+  if(!fbReady){ $('loginMsg').textContent='Firebase config abhi nahi laga hai — login kaam nahi karega jab tak real config add na ho.'; return; }
+  const m=$('loginMobile').value.trim();
+  if(!/^\d{10}$/.test(m)){ $('loginMsg').textContent='10 digit sahi mobile number daalein.'; return; }
+  currentMobile=m;
+  $('loginMsg').textContent='OTP bhej rahe hain...';
+  try{
+    if(window.recaptchaVerifier){
+      window.recaptchaVerifier.clear();
+      $('recaptcha-container').innerHTML='';
+    }
+    window.recaptchaVerifier=new firebase.auth.RecaptchaVerifier('recaptcha-container',{size:'invisible'});
+    auth.signInWithPhoneNumber('+91'+m,window.recaptchaVerifier).then(function(result){
+      confirmationResult=result;
+      $('otpBox').style.display='block';
+      $('loginMsg').textContent='OTP bhej diya gaya hai.';
+    }).catch(function(error){
+      $('loginMsg').textContent='OTP bhejne mein error: '+error.message;
+      if(window.recaptchaVerifier){ window.recaptchaVerifier.clear(); $('recaptcha-container').innerHTML=''; window.recaptchaVerifier=null; }
+    });
+  }catch(e){ $('loginMsg').textContent='Error: '+e.message; }
+};
+$('verifyOtpBtn').onclick=function(){
+  const otp=$('otpInput').value.trim();
+  if(!confirmationResult){ $('loginMsg').textContent='Pehle OTP bhejein.'; return; }
+  confirmationResult.confirm(otp).then(function(result){
+    $('loginMsg').textContent='Login successful.';
+    db.collection('shops').doc(currentMobile).get().then(function(doc){
+      if(doc.exists){
+        const data=doc.data();
+        $('shopName').value=data.shopName||'';
+        $('shopGstinTop').value=data.shopGstin||'';
+        if(data.shopGstin) $('gstin').value=data.shopGstin;
+      }
+      applyPremiumState(true);
+    });
+  }).catch(function(error){
+    $('loginMsg').textContent='OTP galat hai: '+error.message;
+  });
+};
+$('logoutBtn').onclick=function(){
+  if(fbReady && auth) auth.signOut();
+  currentMobile='';
+  $('loginMobile').value=''; $('otpInput').value=''; $('otpBox').style.display='none'; $('loginMsg').textContent='';
+  applyPremiumState(false);
+};
+if(fbReady && auth){
+  auth.onAuthStateChanged(function(user){
+    if(!user) applyPremiumState(false);
+  });
+}
+applyPremiumState(false);
+
+$('shopLogo').addEventListener('change',function(){
+  const file=this.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    shopLogoDataUrl=e.target.result;
+    $('shopLogoPreview').innerHTML='<img src="'+shopLogoDataUrl+'" style="max-width:100px;border-radius:12px;display:block">';
+    saveShopSettings();
+  };
+  reader.readAsDataURL(file);
+});
+loadShopSettings();
+
+let itemPhotoDataUrl='';
+$('itemPhoto').addEventListener('change',function(){
+  const file=this.files[0];
+  if(!file){ itemPhotoDataUrl=''; $('itemPhotoPreview').innerHTML=''; return; }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    itemPhotoDataUrl=e.target.result;
+    $('itemPhotoPreview').innerHTML='<img src="'+itemPhotoDataUrl+'" style="max-width:120px;border-radius:12px;display:block">';
+  };
+  reader.readAsDataURL(file);
+});
+
+function buildBillPdf(){
+  const { jsPDF }=window.jspdf;
+  const doc=new jsPDF({unit:'pt',format:'a4'});
+  let y=40;
+  const shopName=$('shopName').value.trim();
+  const shopGstin=$('shopGstinTop').value.trim();
+  if(shopLogoDataUrl){
+    try{ doc.addImage(shopLogoDataUrl,'JPEG',40,y,50,50); }catch(e){}
+  }
+  const textX=shopLogoDataUrl?100:40;
+  doc.setFontSize(18); doc.text(shopName||'Jewellers Bill',textX,y+18);
+  if(shopGstin){ doc.setFontSize(10); doc.text('GSTIN: '+shopGstin,textX,y+34); }
+  y+=shopLogoDataUrl?70:36;
+  doc.setFontSize(11);
+  const custName=$('custName').value.trim();
+  const custPhone=$('custPhone').value.trim();
+  const itemType=$('itemType').value.trim()||'—';
+  if(custName){ doc.text('Customer Name: '+custName,40,y); y+=18; }
+  if(custPhone){ doc.text('Customer Number: '+custPhone,40,y); y+=18; }
+  doc.text('Item: '+itemType,40,y); y+=18;
+  y+=6;
+  if(itemPhotoDataUrl){
+    try{ doc.addImage(itemPhotoDataUrl,'JPEG',40,y,120,120); y+=132; }catch(e){}
+  }
+  doc.setLineWidth(0.5); doc.line(40,y,555,y); y+=16;
+  const rows=[...document.querySelectorAll('#result .line')].filter(row=>getComputedStyle(row).display!=='none');
+  rows.forEach(row=>{
+    const label=row.children[0]?.textContent.trim()||'';
+    const value=row.children[1]?.textContent.trim()||'';
+    if(!label && !value) return;
+    doc.text(label,40,y);
+    doc.text(value,380,y);
+    y+=18;
+    if(y>760){ doc.addPage(); y=40; }
+  });
+  y+=10;
+  doc.setFontSize(14);
+  doc.text('Total: ₹'+($('rTotal').textContent||''),40,y);
+  return doc;
+}
+$('downloadPdf').onclick=function(){
+  if($('result').classList.contains('hidden')){ alert('Pehle Calculate karein.'); return; }
+  buildBillPdf().save('bill.pdf');
+};
+$('shareWhatsapp').onclick=async function(){
+  if($('result').classList.contains('hidden')){ alert('Pehle Calculate karein.'); return; }
+  const doc=buildBillPdf();
+  const blob=doc.output('blob');
+  const file=new File([blob],'bill.pdf',{type:'application/pdf'});
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:($('shopName').value.trim()||'Jewellery')+' Bill',text:'Aapka bill.'}); return; }catch(e){}
+  }
+  doc.save('bill.pdf');
+  const phoneDigits=$('custPhone').value.replace(/\D/g,'');
+  const text=encodeURIComponent(($('shopName').value.trim()||'Jewellers')+' ki taraf se aapka bill PDF taiyar hai, please attach karke bhejein.');
+  const waUrl=phoneDigits?('https://wa.me/91'+phoneDigits+'?text='+text):('https://wa.me/?text='+text);
+  window.open(waUrl,'_blank');
+  alert('Is browser mein file seedha WhatsApp par nahi ja sakti. PDF download ho gaya hai — WhatsApp khul raha hai, file manually attach kar dein.');
+};
+
+function getEffectiveRate(baseRate){
+  const basis=document.getElementById('rateBasis')?.value || 'selected';
+  const purity=document.getElementById('purity')?.value || '';
+  const basisNum=parseFloat(basis);
+  const purityNum=parseFloat(purity);
+  if(basis==='selected' || !basisNum || !purityNum) return baseRate;
+  return baseRate*(purityNum/basisNum);
+}
+function setDiamondMode(caratMode){
+ $('diamondGramWrap').classList.toggle('hidden',caratMode);
+ $('diamondCaratWrap').classList.toggle('hidden',!caratMode);
+ $('diamondGramBtn').classList.toggle('active',!caratMode);
+ $('diamondCaratBtn').classList.toggle('active',caratMode);
+}
+$('diamondGramBtn').onclick=()=>setDiamondMode(false);
+$('diamondCaratBtn').onclick=()=>setDiamondMode(true);
+$('diamondGram').oninput=()=>{const g=Number($('diamondGram').value)||0;$('carat').value=g?(g/0.2).toFixed(3):''};
+$('carat').oninput=()=>{const c=Number($('carat').value)||0;$('diamondGram').value=c?(c*0.2).toFixed(3):''};
+
+function setNaginaMode(caratMode){
+ $('naginaGramWrap').classList.toggle('hidden',caratMode);
+ $('naginaCaratWrap').classList.toggle('hidden',!caratMode);
+ $('naginaGramBtn').classList.toggle('active',!caratMode);
+ $('naginaCaratBtn').classList.toggle('active',caratMode);
+}
+$('naginaGramBtn').onclick=()=>setNaginaMode(false);
+$('naginaCaratBtn').onclick=()=>setNaginaMode(true);
+$('naginaWeight').oninput=()=>{const g=Number($('naginaWeight').value)||0;$('naginaCarat').value=g?(g/0.2).toFixed(3):''};
+$('naginaCarat').oninput=()=>{const c=Number($('naginaCarat').value)||0;$('naginaWeight').value=c?(c*0.2).toFixed(3):''};
+
+function updateWeightLabel(){
+  const label=document.querySelector('label[for="weight"]') || Array.from(document.querySelectorAll('label')).find(x=>x.textContent.trim()==='Weight (gram)');
+  if(label){
+    const v=$('metal').value;
+    label.textContent=(v==='mangalsutra'||v==='kundan_mangalsutra')?'Mangal Sutra Total Weight (gram)':'Weight (gram)';
+  }
+}
+function syncBhaoFromPurity(){
+ const p=$('purity').value;
+ const b=$('rateBasis');
+ if(!b) return;
+ const v=$('metal').value;
+ const old=b.value;
+ let options=[];
+ if(v==='silver' || v==='silver_diamond'){
+   options=[['999','999 Silver'],['925','925 Silver'],['9999','999.9 Silver']];
+ }else{
+   options=[['24','24K'],['22','22K'],['20','20K'],['18','18K'],['14','14K'],['10','10K'],['9','9K']];
+ }
+ b.innerHTML='';
+ options.forEach(([value,text])=>{
+   const opt=document.createElement('option');
+   opt.value=value; opt.textContent=text; b.appendChild(opt);
+ });
+ if(options.some(x=>x[0]===old)) b.value=old;
+ else if(options.some(x=>x[0]===p)) b.value=p;
+ else b.value=options[0][0];
+}
+function updateMetalUI(){
+ const v=$('metal').value;
+ const isDiamond=v==='gold_diamond'||v==='silver_diamond';
+ $('diamondBox').style.display=isDiamond?'block':'none';
+ $('purity').disabled=false;
+ if(v==='silver' || v==='silver_diamond'){
+   $('purity').innerHTML='<option value="999">999 Silver</option><option value="925">925 Silver</option><option value="9999">999.9 Silver</option>';
+ }else{
+   $('purity').innerHTML='<option value="24">24K</option><option value="22">22K</option><option value="20">20K</option><option value="18">18K</option><option value="14">14K</option>';
+ }
+ syncBhaoFromPurity();
+}
+$('metal').addEventListener('change',updateMetalUI);
+$('metal').addEventListener('change',updateWeightLabel);
+$('purity').addEventListener('change',syncBhaoFromPurity);
+
+const naginaBox=$('naginaBox');
+const naginaType=$('naginaType');
+const otherNaginaWrap=$('otherNaginaWrap');
+function updateNaginaUI(){
+  const v=$('metal').value;
+  const isNagina=v==='nagina';
+  naginaBox.style.display=isNagina?'block':'none';
+  if(!isNagina) otherNaginaWrap.style.display='none';
+  else otherNaginaWrap.style.display=(naginaType.value==='Other')?'block':'none';
+}
+naginaType.addEventListener('change',()=>{
+  otherNaginaWrap.style.display=naginaType.value==='Other'?'block':'none';
+});
+updateMetalUI();
+updateWeightLabel();
+updateNaginaUI();
+$('metal').addEventListener('change',updateNaginaUI);
+
+const mangalBox=$('mangalBox');
+const kundanMangalFields=$('kundanMangalFields');
+function updateMangalUI(){
+  const v=$('metal').value;
+  const isM=v==='mangalsutra'||v==='kundan_mangalsutra';
+  mangalBox.style.display=isM?'block':'none';
+  kundanMangalFields.style.display=v==='kundan_mangalsutra'?'block':'none';
+}
+$('metal').addEventListener('change',updateMangalUI);
+updateMangalUI();
+
+
+function setGST(withGST){
+ gstRate=withGST?3:0;
+ $('gstYes').classList.toggle('active',withGST);
+ $('gstNo').classList.toggle('active',!withGST);
+ $('gstinWrap').classList.toggle('hidden',!withGST);
+}
+$('gstYes').onclick=()=>setGST(true);
+$('gstNo').onclick=()=>setGST(false);
+
+$('calculate').onclick=function(){
+ const metal=$('metal').value;
+ const makingPct=Math.max(0,Number($('making').value)||0);
+ const wastagePct=Math.max(0,Number($('wastage').value)||0);
+ const purity=$('purity').value;
+ const enteredRate=Number($('rate').value)||0;
+ const rateBasis=$('rateBasis').value;
+ const gstin=$('gstin').value.trim().toUpperCase();
+ const diamondMode=['gold_diamond','silver_diamond'].includes(metal);
+ const metalMode=['gold','silver','gold_diamond','silver_diamond','mangalsutra','kundan_mangalsutra','nagina'].includes(metal);
+ const mangalMode=['mangalsutra','kundan_mangalsutra'].includes(metal);
+ const kundanMangal=metal==='kundan_mangalsutra';
+ const naginaMode=metal==='nagina';
+ const isSilverBase=['silver','silver_diamond'].includes(metal);
+ let totalWeight=0, goldWeight=0, metalWeight=0;
+ let naginaWeight=0,naginaAmount=0,motiWeight=0,motiAmount=0,kundanWeight=0,kundanAmount=0;
+ let diamondGram=0,carat=0,diamondValue=0,metalValue=0,wastageValue=0,makingValue=0;
+
+ if(mangalMode){
+   totalWeight=Number($('weight').value)||0;
+   motiWeight=Number($('motiWeight').value)||0;
+   motiAmount=Number($('motiAmount').value)||0;
+   if(kundanMangal){ kundanWeight=Number($('kundanWeight').value)||0; kundanAmount=Number($('kundanAmount').value)||0; }
+   goldWeight=totalWeight-motiWeight-kundanWeight;
+   if(!(totalWeight>0)){alert('Mangal Sutra Total Weight sahi bharein.');return;}
+   if(goldWeight<0){alert('Kala Moti + Kundan weight total weight se zyada nahi ho sakta.');return;}
+   metalWeight=goldWeight;
+ } else if(naginaMode){
+   totalWeight=Number($('weight').value)||0;
+   naginaWeight=Number($('naginaWeight').value)||0;
+   naginaAmount=Number($('naginaAmount').value)||0;
+   if(!(totalWeight>0)){alert('Total Jewellery Weight sahi bharein.');return;}
+   if(naginaWeight>totalWeight){alert('Nagina weight total jewellery weight se zyada nahi ho sakta.');return;}
+   metalWeight=totalWeight-naginaWeight;
+ } else {
+   totalWeight=Number($('weight').value)||0;
+   if(!(totalWeight>0)){alert('Weight sahi bharein.');return;}
+   metalWeight=totalWeight;
+   if(diamondMode){
+     diamondGram=(Number($('diamondGram').value)>0?Number($('diamondGram').value):(Number($('carat').value)||0)*0.2);
+     carat=diamondGram/0.2;
+     if(!(carat>0)){alert('Diamond weight/carat sahi bharein.');return;}
+     if(diamondGram>totalWeight){alert('Diamond weight total jewellery weight se zyada nahi ho sakta.');return;}
+     metalWeight=totalWeight-diamondGram;
+   }
+ }
+ if(diamondMode){
+   diamondValue=Number($('diamondAmount').value)||0;
+ }
+ const basisNum=parseFloat(rateBasis), purityNum=parseFloat(purity);
+ const effectiveRate=(rateBasis==='selected'||!basisNum||!purityNum)?enteredRate:enteredRate*(purityNum/basisNum);
+ if(metalMode){
+   if(!(enteredRate>0)){alert('Gold/Silver rate sahi bharein.');return;}
+   metalValue=metalWeight*(effectiveRate/10);
+ }
+ const extraValue=naginaMode?naginaAmount:(motiAmount+kundanAmount);
+ wastageValue=metalMode?metalValue*wastagePct/100:0;
+ const makingBase=metalValue+wastageValue;
+ makingValue=makingBase*makingPct/100;
+ const subtotal=makingBase+makingValue+extraValue+diamondValue;
+ const gst=subtotal*gstRate/100;
+ const total=subtotal+gst;
+ if(gstRate===3 && gstin && !/^[0-9A-Z]{15}$/.test(gstin)){alert('GSTIN 15 characters ka hona chahiye.');return;}
+ const names={gold:'Gold Jewellery',silver:'Silver Jewellery',gold_diamond:'Gold + Diamond Jewellery',silver_diamond:'Silver + Diamond Jewellery',mangalsutra:'Mangal Sutra Jewellery',kundan_mangalsutra:'Kundan Mangal Sutra Jewellery',nagina:'Gold + Nagina Jewellery'};
+ const show=(id,on)=>$(id).style.display=on?'flex':'none';
+ const custName=$('custName').value.trim();
+ const custPhone=$('custPhone').value.trim();
+ const itemType=$('itemType').value.trim()||'—';
+ show('rCustNameRow',!!custName); $('rCustName').textContent=custName;
+ show('rCustPhoneRow',!!custPhone); $('rCustPhone').textContent=custPhone;
+ $('rItemType').textContent=itemType;
+ $('rItemPhoto').innerHTML=itemPhotoDataUrl?('<img src="'+itemPhotoDataUrl+'" style="max-width:150px;border-radius:12px;display:block;margin-top:8px">'):'';
+ $('rMetal').textContent=names[metal]||metal;
+ $('rPurity').textContent=isSilverBase ? purity : purity+'K';
+ $('rPurityLabel').textContent=isSilverBase?'Silver Purity':'Gold Purity';
+ $('rRateBasis').textContent=rateBasis==='selected'?'Selected Purity':(isSilverBase?rateBasis:rateBasis+'K');
+ const rateMetalLabel=isSilverBase?'Silver Rate':'Gold Rate';
+ const rateBasisLabel=rateBasis==='selected' ? 'Selected Purity' : (isSilverBase ? rateBasis : rateBasis+'K');
+ $('rRate').textContent='₹'+money(enteredRate)+' / 10 g';
+ $('rRateLabel').textContent=rateMetalLabel+' ('+rateBasisLabel+')';
+ $('rMetalValue').textContent='₹'+money(metalValue);
+ $('rMetalValueLabel').textContent=isSilverBase?'Silver Value':'Gold Value';
+ $('rGoldWeightLabel').textContent=isSilverBase?'Silver Weight':'Gold Weight';
+ $('rWastage').textContent='₹'+money(wastageValue)+' ('+wastagePct+'%)';
+ $('rMaking').textContent='₹'+money(makingValue)+' ('+makingPct+'%)';
+ $('rSubtotal').textContent='₹'+money(subtotal);
+ $('rGST').textContent='₹'+money(gst)+' ('+gstRate+'%)';
+ $('rGSTIN').textContent=gstRate===3?'GSTIN: '+(gstin||'—'):'GST Mode: Without GST';
+ $('rTotal').textContent=money(total);
+ show('rNaginaTypeRow',naginaMode);
+ $('rNaginaType').textContent=naginaMode?($('naginaType').value==='Other'?($('otherNagina').value||'Other Nagina'):$('naginaType').value):'';
+ show('rTotalWeightRow',mangalMode||diamondMode||naginaMode);
+ $('rTotalWeight').textContent=totalWeight.toFixed(3)+' g';
+ show('rDiamondWeightRow',diamondMode);
+ $('rDiamondWeight').textContent=diamondMode?'−'+diamondGram.toFixed(3)+' g':'';
+ show('rNaginaWeightSubRow',naginaMode);
+ $('rNaginaWeightSub').textContent=naginaMode?'−'+naginaWeight.toFixed(3)+' g':'';
+ show('rGoldWeightRow',mangalMode||metal==='gold_diamond'||metal==='silver_diamond'||naginaMode);
+ $('rGoldWeight').textContent=(mangalMode?goldWeight:metalWeight).toFixed(3)+' g';
+ show('rKundanWeightRow',kundanMangal); $('rKundanWeight').textContent='−'+kundanWeight.toFixed(3)+' g';
+ show('rKundanAmountRow',kundanMangal); $('rKundanAmount').textContent='₹'+money(kundanAmount);
+ show('rMotiWeightRow',mangalMode); $('rMotiWeight').textContent='−'+motiWeight.toFixed(3)+' g';
+ show('rMotiAmountRow',mangalMode); $('rMotiAmount').textContent='₹'+money(motiAmount);
+ show('rNaginaWeightRow',false); $('rNaginaWeight').textContent='';
+ show('rNaginaAmountRow',false); $('rNaginaAmount').textContent='';
+ show('rDiamondRow',false);
+ show('rDiamondAmountRow',diamondMode);
+ $('rDiamondAmount').textContent=diamondMode?'+₹'+money(diamondValue):'';
+ show('rNaginaAmountAddRow',naginaMode);
+ $('rNaginaAmountAdd').textContent=naginaMode?'+₹'+money(naginaAmount):'';
+ show('rMetalPurityRow',metalMode); show('rRateBasisRow',metalMode); show('rRateRow',metalMode); show('rMetalValueRow',metalMode); show('rWastageRow',metalMode); show('rMakingRow',true);
+ $('result').classList.remove('hidden');
+};
+
+$('reset').onclick=function(){
+ $('custName').value=''; $('custPhone').value='';
+ $('itemType').value=''; $('rItemPhoto').innerHTML='';
+ $('itemPhoto').value=''; itemPhotoDataUrl=''; $('itemPhotoPreview').innerHTML='';
+ $('metal').value='gold'; updateMetalUI(); $('purity').value='24';
+ $('weight').value=''; $('rate').value=''; $('making').value='0'; $('wastage').value='0';
+ syncBhaoFromPurity();
+ $('motiWeight').value=''; $('motiAmount').value='';
+ $('kundanWeight').value=''; $('kundanAmount').value='';
+ $('naginaWeight').value=''; $('naginaCarat').value=''; $('naginaAmount').value=''; $('otherNagina').value='';
+ $('naginaType').value='Ruby'; otherNaginaWrap.style.display='none';
+ $('carat').value=''; $('diamondGram').value=''; $('diamondAmount').value='';
+ $('certificate').value='No Certificate'; $('certificateNo').value='';
+ $('gstin').value=''; setGST(true); $('result').classList.add('hidden');
+ updateNaginaUI(); updateMangalUI();
+};
+})();
+</script>
+</body>
+</html>
